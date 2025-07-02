@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+    parameters {
+        string(name: 'LOG_PATH', defaultValue: '/var/log/httpd/access.log', description: 'Path to access log file')
+    }
+    environment {
+        S3_BUCKET = 'automated-log-bucket'
+        AWS_REGION = 'ap-northeast-3'
+        FILENAME = 'access.log'
+    }
+    stages {
+        stage('Upload to S3') {
+            steps {
+                sh """
+                    aws s3 cp "${params.LOG_PATH}" s3://${S3_BUCKET}/${FILENAME} --region ${AWS_REGION}
+                """
+            }
+        }
+        stage('Verify Upload') {
+            steps {
+                sh """
+                    aws s3 ls s3://${S3_BUCKET}/ --region ${AWS_REGION} | grep ${FILENAME} || { echo 'Upload verification failed'; exit 1; }
+                """
+            }
+        }
+        stage('Clear Log File') {
+            steps {
+                sh "truncate -s 0 \"${params.LOG_PATH}\""
+            }
+        }
+    }
+    post {
+        success {
+            echo '✅ Job completed successfully.'
+        }
+        failure {
+            echo '❌ Jenkins job failed.'
+        }
+    }
+}
